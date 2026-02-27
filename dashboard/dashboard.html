@@ -1185,7 +1185,7 @@ function renderLiveActivity(data){
   if(!log)return;
 
   if(!data.ok||!data.activity||!data.activity.length){
-    const msg=data.message||data.error||'暂无此任务的对话记录（Agent 会话中未提及此任务ID）';
+    const msg=data.message||data.error||'Agent 尚未上报进展（等待 Agent 调用 progress 命令）';
     log.innerHTML=`<div class="la-empty">${esc(msg)}</div>`;
     if(dot)dot.classList.add('idle');
     if(agLbl){
@@ -1203,10 +1203,7 @@ function renderLiveActivity(data){
     agLbl.textContent=parts.join(' · ');
   }
 
-  // 活动来源提示横幅
-  const srcBanner = data.activitySource === 'agent_latest'
-    ? `<div style="background:rgba(255,180,0,0.12);border:1px solid rgba(255,180,0,0.25);border-radius:6px;padding:6px 10px;margin-bottom:8px;font-size:12px;color:#e0c060">⚡ 以下为 <b>${esc(data.agentLabel||data.agentId||'Agent')}</b> 的最新工作动态（该 Agent 当前正在处理任务）</div>`
-    : '';
+  const srcBanner = '';
 
   // 判断是否活跃（最后一条活动5分钟内）
   const lastEntry=data.activity[data.activity.length-1];
@@ -1222,6 +1219,22 @@ function renderLiveActivity(data){
 
   const entries=data.activity.map(a=>{
     const time=a.at?fmtActivityTime(a.at):'';
+    if(a.kind==='flow'){
+      return `<div class="la-entry la-tool"><span class="la-icon">📋</span><span class="la-body"><b>${esc(a.from)}</b> → <b>${esc(a.to)}</b>　${esc(a.remark||'')}</span><span class="la-time">${time}</span></div>`;
+    }
+    if(a.kind==='progress'){
+      const agBadge=a.agent?`<span style="font-size:9px;color:var(--muted);background:var(--panel);padding:1px 4px;border-radius:3px;margin-right:4px">${_agentLabels[a.agent]||a.agent}</span>`:'';
+      return `<div class="la-entry la-assistant"><span class="la-icon">🔄</span><span class="la-body">${agBadge}<b>当前进展：</b>${esc(a.text)}</span><span class="la-time">${time}</span></div>`;
+    }
+    if(a.kind==='todos'){
+      const items=(a.items||[]).map(td=>{
+        const icon=td.status==='completed'?'✅':td.status==='in-progress'?'🔄':'⬜';
+        const cls=td.status==='completed'?'style="opacity:0.5;text-decoration:line-through"':td.status==='in-progress'?'style="color:#60a5fa;font-weight:bold"':'';
+        return `<div ${cls}>${icon} ${esc(td.title)}</div>`;
+      }).join('');
+      return `<div class="la-entry" style="flex-direction:column;align-items:flex-start;gap:2px"><div style="font-size:11px;color:var(--muted);margin-bottom:2px">📝 执行计划</div>${items}</div>`;
+    }
+    // legacy kinds (assistant/tool_result/user) - backward compatibility
     const agBadge=a.agent?`<span style="font-size:9px;color:var(--muted);background:var(--panel);padding:1px 4px;border-radius:3px;margin-right:4px">${_agentLabels[a.agent]||a.agent}</span>`:'';
     if(a.kind==='assistant'){
       let html='';

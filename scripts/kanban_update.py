@@ -157,7 +157,7 @@ def cmd_create(task_id, title, state, org, official, remark=None):
         "official": official,
         "org": actual_org,
         "state": state,
-        "now": f"{actual_org}正在处理",
+        "now": clean_remark[:60] if remark else f"已下旨，等待{actual_org}接旨",
         "eta": "-",
         "block": "无",
         "output": "",

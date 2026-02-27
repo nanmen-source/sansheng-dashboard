@@ -283,7 +283,7 @@ def handle_create_task(title, org='中书省', official='中书令', priority='n
         'official': official,
         'org': initial_org,
         'state': 'Zhongshu',
-        'now': f'{initial_org}正在规划',
+        'now': '等待中书省接旨',
         'eta': '-',
         'block': '无',
         'output': '',
@@ -746,7 +746,10 @@ def get_agent_latest_segment(agent_id, limit=20):
 
 
 def get_task_activity(task_id):
-    """获取任务关联 Agent 的实时活动（按 task_id 过滤）。"""
+    """获取任务的实时进展数据。
+    数据来源：任务自身的 now / todos / flow_log 字段（由 Agent 通过 progress 命令主动上报），
+    不再从 Agent session JSONL 中抓取对话日志。
+    """
     tasks = load_tasks()
     task = next((t for t in tasks if t.get('id') == task_id), None)
     if not task:
@@ -754,104 +757,54 @@ def get_task_activity(task_id):
 
     state = task.get('state', '')
     org = task.get('org', '')
+    now_text = task.get('now', '')
+    todos = task.get('todos', [])
+    updated_at = task.get('updatedAt', '')
 
-    # 确定当前 agent + 可能的关联 agents（任务可能经过多个 agent）
+    # 当前负责 Agent
     agent_id = _STATE_AGENT_MAP.get(state)
     if agent_id is None and state in ('Doing', 'Next'):
         agent_id = _ORG_AGENT_MAP.get(org)
 
-    # 收集所有可能涉及的 agent（从流转日志推断）
-    related_agents = set()
-    if agent_id:
-        related_agents.add(agent_id)
-    # 流转过的省部也可能有相关记录
-    _DEPT_AGENT = {
-        '中书省': 'zhongshu', '门下省': 'menxia', '尚书省': 'shangshu',
-        '太子': 'main', '皇上': 'main',
-        **{k: v for k, v in _ORG_AGENT_MAP.items()},
-    }
+    # 构建活动条目列表（从 flow_log + 当前 progress）
+    activity = []
+
+    # 1. flow_log 转为活动条目
     for fl in task.get('flow_log', []):
-        for dept in (fl.get('from', ''), fl.get('to', '')):
-            aid = _DEPT_AGENT.get(dept)
-            if aid:
-                related_agents.add(aid)
+        activity.append({
+            'at': fl.get('at', ''),
+            'kind': 'flow',
+            'from': fl.get('from', ''),
+            'to': fl.get('to', ''),
+            'remark': fl.get('remark', ''),
+        })
 
-    if not related_agents:
-        return {
-            'ok': True, 'taskId': task_id, 'agentId': None,
-            'activity': [], 'message': f'状态 {state} 无对应 Agent'
-        }
+    # 2. 当前进展（now 字段，Agent 通过 progress 命令上报）
+    if now_text:
+        activity.append({
+            'at': updated_at,
+            'kind': 'progress',
+            'text': now_text,
+            'agent': agent_id or '',
+        })
 
-    # 从所有相关 agent 的 session 中搜索提及 task_id 的条目
-    all_activity = []
-    for aid in related_agents:
-        entries = get_agent_activity(aid, limit=30, task_id=task_id)
-        for e in entries:
-            e['agent'] = aid  # 标记来源 agent
-        all_activity.extend(entries)
-
-    # 活动来源标记
-    activity_source = 'task'  # task=精确匹配, keyword=关键词匹配, agent_latest=Agent最新活动
-
-    # 如果按 task_id 精确匹配无结果，尝试用标题关键词匹配
-    if not all_activity and agent_id:
-        title = task.get('title', '')
-        # 对 OC-* 任务直接读其 session 文件（无需匹配）
-        session_output = task.get('output', '')
-        if session_output and str(task_id).startswith('OC-') and pathlib.Path(session_output).exists():
-            fallback = get_agent_activity(agent_id, limit=15, task_id=None)
-            for e in fallback:
-                e['agent'] = agent_id
-            all_activity = fallback
-            activity_source = 'keyword'
-        elif title and len(title) >= 6:
-            keywords = _extract_keywords(title)
-            if keywords:
-                fallback = get_agent_activity_by_keywords(agent_id, keywords, limit=20)
-                for e in fallback:
-                    e['agent'] = agent_id
-                all_activity = fallback
-                if all_activity:
-                    activity_source = 'keyword'
-
-    # 如果仍无结果，且任务在活跃状态，展示 Agent 最新一轮对话
-    _ACTIVE_STATES = {'Zhongshu', 'Menxia', 'Assigned', 'Doing', 'Review', 'Next'}
-    if not all_activity and agent_id and state in _ACTIVE_STATES:
-        latest = get_agent_latest_segment(agent_id, limit=20)
-        for e in latest:
-            e['agent'] = agent_id
-        all_activity = latest
-        if all_activity:
-            activity_source = 'agent_latest'
-
-    # 按时间排序
-    def sort_key(e):
-        at = e.get('at', '')
-        if isinstance(at, (int, float)):
-            return at
-        return at  # ISO string 可直接排序
-    all_activity.sort(key=sort_key)
-
-    # 只保留最后 30 条
-    all_activity = all_activity[-30:]
-
-    # 获取当前 Agent 会话文件的修改时间（心跳）
-    last_active = None
-    if agent_id:
-        sessions_dir = OCLAW_HOME / 'agents' / agent_id / 'sessions'
-        if sessions_dir.exists():
-            for f in sorted(sessions_dir.glob('*.jsonl'), key=lambda x: x.stat().st_mtime, reverse=True)[:1]:
-                last_active = datetime.datetime.fromtimestamp(f.stat().st_mtime).strftime('%Y-%m-%d %H:%M:%S')
+    # 3. 计划清单（todos 字段）
+    if todos:
+        activity.append({
+            'at': updated_at,
+            'kind': 'todos',
+            'items': todos,
+        })
 
     return {
         'ok': True,
         'taskId': task_id,
         'agentId': agent_id,
         'agentLabel': _STATE_LABELS.get(state, state),
-        'lastActive': last_active,
-        'activity': all_activity,
-        'activitySource': activity_source,
-        'relatedAgents': list(related_agents),
+        'lastActive': updated_at[:19].replace('T', ' ') if updated_at else None,
+        'activity': activity,
+        'activitySource': 'progress',
+        'relatedAgents': [agent_id] if agent_id else [],
     }
 
 
