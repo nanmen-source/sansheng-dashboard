@@ -78,6 +78,20 @@ python3 scripts/kanban_update.py state <id> <state> "<说明>"
 python3 scripts/kanban_update.py flow <id> "<from>" "<to>" "<remark>"
 python3 scripts/kanban_update.py done <id> "<output>" "<summary>"
 python3 scripts/kanban_update.py progress <id> "<当前在做什么>" "<计划1✅|计划2🔄|计划3>"
+python3 scripts/kanban_update.py todo <id> <todo_id> "<title>" <status> --detail "<产出详情>"
+```
+
+### 📝 子任务详情上报（推荐！）
+
+> 每完成一个子任务，用 `todo` 命令上报产出详情，让皇上能看到你具体做了什么：
+
+```bash
+# 完成需求整理后
+python3 scripts/kanban_update.py todo JJC-xxx 1 "需求整理" completed --detail "1. 核心目标：xxx\n2. 约束条件：xxx\n3. 预期产出：xxx"
+
+# 完成方案起草后
+python3 scripts/kanban_update.py todo JJC-xxx 2 "方案起草" completed --detail "方案要点：\n- 第一步：xxx\n- 第二步：xxx\n- 预计耗时：xxx"
+```
 ```
 
 > ⚠️ 标题**不要**夹带飞书消息的 JSON 元数据（Conversation info 等），只提取旨意正文！

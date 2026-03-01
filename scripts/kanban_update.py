@@ -372,10 +372,11 @@ def cmd_progress(task_id, now_text, todos_pipe='', tokens=0, cost=0.0, elapsed=0
         res_info = f' [res: {tokens}tok/${cost:.4f}/{elapsed}s]'
     log.info(f'📡 {task_id} 进展: {clean[:40]}... [{done_cnt[0]}/{total_cnt[0]}]{res_info}')
 
-def cmd_todo(task_id, todo_id, title, status='not-started'):
+def cmd_todo(task_id, todo_id, title, status='not-started', detail=''):
     """添加或更新子任务 todo（原子操作）
 
     status: not-started / in-progress / completed
+    detail: 可选，该子任务的详细产出/说明（Markdown 格式）
     """
     # 校验 status 值
     if status not in ('not-started', 'in-progress', 'completed'):
@@ -393,8 +394,13 @@ def cmd_todo(task_id, todo_id, title, status='not-started'):
             existing['status'] = status
             if title:
                 existing['title'] = title
+            if detail:
+                existing['detail'] = detail
         else:
-            t['todos'].append({'id': todo_id, 'title': title, 'status': status})
+            item = {'id': todo_id, 'title': title, 'status': status}
+            if detail:
+                item['detail'] = detail
+            t['todos'].append(item)
         t['updatedAt'] = now_iso()
         result_info[0] = sum(1 for td in t['todos'] if td.get('status') == 'completed')
         result_info[1] = len(t['todos'])
@@ -428,7 +434,22 @@ if __name__ == '__main__':
     elif cmd == 'block':
         cmd_block(args[1], args[2])
     elif cmd == 'todo':
-        cmd_todo(args[1], args[2], args[3] if len(args) > 3 else '', args[4] if len(args) > 4 else 'not-started')
+        # 解析可选 --detail 参数
+        todo_pos = []
+        todo_detail = ''
+        ti = 1
+        while ti < len(args):
+            if args[ti] == '--detail' and ti + 1 < len(args):
+                todo_detail = args[ti + 1]; ti += 2
+            else:
+                todo_pos.append(args[ti]); ti += 1
+        cmd_todo(
+            todo_pos[0] if len(todo_pos) > 0 else '',
+            todo_pos[1] if len(todo_pos) > 1 else '',
+            todo_pos[2] if len(todo_pos) > 2 else '',
+            todo_pos[3] if len(todo_pos) > 3 else 'not-started',
+            detail=todo_detail,
+        )
     elif cmd == 'progress':
         # 解析可选 --tokens/--cost/--elapsed 参数
         pos_args = []

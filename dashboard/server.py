@@ -401,8 +401,15 @@ def handle_review_action(task_id, action, comment=''):
     })
     task['updatedAt'] = now_iso()
     save_tasks(tasks)
+
+    # 🚀 审批后自动派发对应 Agent
+    new_state = task['state']
+    if new_state not in ('Done',):
+        dispatch_for_state(task_id, task, new_state)
+
     label = '已准奏' if action == 'approve' else '已封驳'
-    return {'ok': True, 'message': f'{task_id} {label}'}
+    dispatched = ' (已自动派发 Agent)' if new_state != 'Done' else ''
+    return {'ok': True, 'message': f'{task_id} {label}{dispatched}'}
 
 
 # ══ Agent 在线状态检测 ══
@@ -1292,8 +1299,90 @@ _STATE_LABELS = {
     'Assigned': '尚书省', 'Next': '待执行', 'Doing': '执行中', 'Review': '审查', 'Done': '完成',
 }
 
+
+def dispatch_for_state(task_id, task, new_state):
+    """推进/审批后自动派发对应 Agent（后台异步，不阻塞响应）。"""
+    agent_id = _STATE_AGENT_MAP.get(new_state)
+    if agent_id is None and new_state in ('Doing', 'Next'):
+        org = task.get('org', '')
+        agent_id = _ORG_AGENT_MAP.get(org)
+    if not agent_id:
+        log.info(f'ℹ️ {task_id} 新状态 {new_state} 无对应 Agent，跳过自动派发')
+        return
+
+    title = task.get('title', '(无标题)')
+    target_dept = task.get('targetDept', '')
+
+    # 根据 agent_id 构造针对性消息
+    _msgs = {
+        'taizi': (
+            f'📜 皇上旨意需要你处理\n'
+            f'任务ID: {task_id}\n'
+            f'旨意: {title}\n'
+            f'⚠️ 看板已有此任务，请勿重复创建。直接用 kanban_update.py 更新状态。\n'
+            f'请立即转交中书省起草执行方案。'
+        ),
+        'zhongshu': (
+            f'📜 旨意已到中书省，请起草方案\n'
+            f'任务ID: {task_id}\n'
+            f'旨意: {title}\n'
+            f'⚠️ 看板已有此任务记录，请勿重复创建。直接用 kanban_update.py state 更新状态。\n'
+            f'请立即起草执行方案，走完完整三省流程（中书起草→门下审议→尚书派发→六部执行）。'
+        ),
+        'menxia': (
+            f'📋 中书省方案提交审议\n'
+            f'任务ID: {task_id}\n'
+            f'旨意: {title}\n'
+            f'⚠️ 看板已有此任务，请勿重复创建。\n'
+            f'请审议中书省方案，给出准奏或封驳意见。'
+        ),
+        'shangshu': (
+            f'📮 门下省已准奏，请派发执行\n'
+            f'任务ID: {task_id}\n'
+            f'旨意: {title}\n'
+            f'{"建议派发部门: " + target_dept if target_dept else ""}\n'
+            f'⚠️ 看板已有此任务，请勿重复创建。\n'
+            f'请分析方案并派发给六部执行。'
+        ),
+    }
+    msg = _msgs.get(agent_id, (
+        f'📌 请处理任务\n'
+        f'任务ID: {task_id}\n'
+        f'旨意: {title}\n'
+        f'⚠️ 看板已有此任务，请勿重复创建。直接用 kanban_update.py 更新状态。'
+    ))
+
+    def _do_dispatch():
+        try:
+            if not _check_gateway_alive():
+                log.warning(f'⚠️ {task_id} 自动派发跳过: Gateway 未启动')
+                return
+            cmd = ['openclaw', 'agent', '--agent', agent_id, '-m', msg,
+                   '--deliver', '--channel', 'feishu', '--timeout', '300']
+            max_retries = 2
+            for attempt in range(1, max_retries + 1):
+                log.info(f'🔄 自动派发 {task_id} → {agent_id} (第{attempt}次)...')
+                result = subprocess.run(cmd, capture_output=True, text=True, timeout=310)
+                if result.returncode == 0:
+                    log.info(f'✅ {task_id} 自动派发成功 → {agent_id}')
+                    return
+                err = result.stderr[:200] if result.stderr else result.stdout[:200]
+                log.warning(f'⚠️ {task_id} 自动派发失败(第{attempt}次): {err}')
+                if attempt < max_retries:
+                    import time
+                    time.sleep(5)
+            log.error(f'❌ {task_id} 自动派发最终失败 → {agent_id}')
+        except subprocess.TimeoutExpired:
+            log.error(f'❌ {task_id} 自动派发超时 → {agent_id}')
+        except Exception as e:
+            log.warning(f'⚠️ {task_id} 自动派发异常: {e}')
+
+    threading.Thread(target=_do_dispatch, daemon=True).start()
+    log.info(f'🚀 {task_id} 推进后自动派发 → {agent_id}')
+
+
 def handle_advance_state(task_id, comment=''):
-    """手动推进任务到下一阶段（解卡用）。"""
+    """手动推进任务到下一阶段（解卡用），推进后自动派发对应 Agent。"""
     tasks = load_tasks()
     task = next((t for t in tasks if t.get('id') == task_id), None)
     if not task:
@@ -1314,9 +1403,15 @@ def handle_advance_state(task_id, comment=''):
     })
     task['updatedAt'] = now_iso()
     save_tasks(tasks)
+
+    # 🚀 推进后自动派发对应 Agent（Done 状态无需派发）
+    if next_state != 'Done':
+        dispatch_for_state(task_id, task, next_state)
+
     from_label = _STATE_LABELS.get(cur, cur)
     to_label = _STATE_LABELS.get(next_state, next_state)
-    return {'ok': True, 'message': f'{task_id} {from_label} → {to_label}'}
+    dispatched = ' (已自动派发 Agent)' if next_state != 'Done' else ''
+    return {'ok': True, 'message': f'{task_id} {from_label} → {to_label}{dispatched}'}
 
 
 class Handler(BaseHTTPRequestHandler):

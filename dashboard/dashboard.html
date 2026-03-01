@@ -274,8 +274,10 @@
     .todo-bar{width:120px;height:6px;background:#0e1320;border-radius:3px;overflow:hidden}
     .todo-bar-fill{height:100%;border-radius:3px;background:var(--ok);transition:width .3s}
     .todo-list{display:flex;flex-direction:column;gap:4px}
-    .todo-item{display:flex;align-items:center;gap:8px;padding:7px 10px;background:var(--panel2);border-radius:8px;font-size:12px;transition:opacity .15s}
+    .todo-item{display:flex;flex-direction:column;background:var(--panel2);border-radius:8px;font-size:12px;transition:opacity .15s}
     .todo-item.done{opacity:.55}
+    .todo-item .t-row{display:flex;align-items:center;gap:8px;padding:7px 10px;cursor:default}
+    .todo-item.has-detail .t-row{cursor:pointer}
     .todo-item .t-icon{font-size:14px;flex-shrink:0}
     .todo-item .t-id{color:var(--muted);font-size:10px;min-width:20px}
     .todo-item .t-title{flex:1;color:var(--text)}
@@ -284,6 +286,10 @@
     .todo-item .t-status.s-done{color:var(--ok);background:#0a2018;border:1px solid #2ecc8a44}
     .todo-item .t-status.s-progress{color:var(--acc);background:#0a1228;border:1px solid #6a9eff44}
     .todo-item .t-status.s-notstarted{color:var(--muted);background:var(--panel);border:1px solid var(--line)}
+    .todo-item .t-expand{color:var(--muted);font-size:10px;transition:transform .2s;flex-shrink:0}
+    .todo-item.expanded .t-expand{transform:rotate(90deg)}
+    .todo-detail{display:none;padding:4px 10px 10px 36px;font-size:11px;line-height:1.6;color:var(--text);white-space:pre-wrap;word-break:break-word;border-top:1px solid var(--line);margin:0 6px;opacity:.85}
+    .todo-item.expanded .todo-detail{display:block}
 
     /* card todo mini-bar */
     .ec-todo-bar{display:flex;align-items:center;gap:6px;font-size:10px;color:var(--muted);margin-top:6px}
@@ -1196,11 +1202,17 @@ function openTask(id){
           const stCls = td.status==='completed'?'s-done':td.status==='in-progress'?'s-progress':'s-notstarted';
           const stLabel = td.status==='completed'?'已完成':td.status==='in-progress'?'进行中':'待开始';
           const itemCls = td.status==='completed'?'done':'';
-          return `<div class="todo-item ${itemCls}">
-            <span class="t-icon">${ico}</span>
-            <span class="t-id">#${td.id||''}</span>
-            <span class="t-title">${esc(td.title||'')}</span>
-            <span class="t-status ${stCls}">${stLabel}</span>
+          const hasDetail = !!(td.detail);
+          const detailCls = hasDetail ? 'has-detail' : '';
+          return `<div class="todo-item ${itemCls} ${detailCls}" ${hasDetail ? `onclick="this.classList.toggle('expanded')"` : ''}>
+            <div class="t-row">
+              ${hasDetail ? '<span class="t-expand">▶</span>' : ''}
+              <span class="t-icon">${ico}</span>
+              <span class="t-id">#${td.id||''}</span>
+              <span class="t-title">${esc(td.title||'')}</span>
+              <span class="t-status ${stCls}">${stLabel}</span>
+            </div>
+            ${hasDetail ? `<div class="todo-detail">${esc(td.detail)}</div>` : ''}
           </div>`;
         }).join('')}
       </div>

@@ -68,6 +68,13 @@ python3 scripts/kanban_update.py progress JJC-xxx "代码审查完成(发现2个
 python3 scripts/kanban_update.py state <id> <state> "<说明>"
 python3 scripts/kanban_update.py flow <id> "<from>" "<to>" "<remark>"
 python3 scripts/kanban_update.py progress <id> "<当前在做什么>" "<计划1✅|计划2🔄|计划3>"
+python3 scripts/kanban_update.py todo <id> <todo_id> "<title>" <status> --detail "<产出详情>"
+```
+
+### 📝 完成子任务时上报详情（推荐！）
+```bash
+# 完成任务后，上报具体产出
+python3 scripts/kanban_update.py todo JJC-xxx 1 "[子任务名]" completed --detail "产出概要：\n- 要点1\n- 要点2\n验证结果：通过"
 ```
 
 ## 语气
