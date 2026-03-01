@@ -13,6 +13,7 @@
   <a href="#-30-秒快速体验">🚀 30 秒体验</a> ·
   <a href="#-架构">🏛️ 架构</a> ·
   <a href="#-功能全景">📋 看板功能</a> ·
+  <a href="docs/task-dispatch-architecture.md">📚 架构文档</a> ·
   <a href="README_EN.md">English</a> ·
   <a href="CONTRIBUTING.md">参与贡献</a>
 </p>
@@ -23,7 +24,8 @@
   <img src="https://img.shields.io/badge/Agents-12_Specialized-8B5CF6?style=flat-square" alt="Agents">
   <img src="https://img.shields.io/badge/Dashboard-Real--time-F59E0B?style=flat-square" alt="Dashboard">
   <img src="https://img.shields.io/badge/License-MIT-22C55E?style=flat-square" alt="License">
-  <img src="https://img.shields.io/badge/Zero_Deps-stdlib_only-EC4899?style=flat-square" alt="Zero Dependencies">
+  <img src="https://img.shields.io/badge/Frontend-React_18-61DAFB?style=flat-square&logo=react&logoColor=white" alt="React">
+  <img src="https://img.shields.io/badge/Backend-stdlib_only-EC4899?style=flat-square" alt="Zero Backend Dependencies">
 </p>
 
 ---
@@ -261,6 +263,7 @@ chmod +x install.sh && ./install.sh
 - ✅ 创建全量 Agent Workspace（含太子/吏部/早朝，兼容历史 main）
 - ✅ 写入各省部 SOUL.md（角色人格 + 工作流规则 + 数据清洗规范）
 - ✅ 注册 Agent 及权限矩阵到 `openclaw.json`
+- ✅ 构建 React 前端（需 Node.js 18+，如未安装则跳过）
 - ✅ 初始化数据目录 + 首次数据同步
 - ✅ 重启 Gateway 使配置生效
 
@@ -276,6 +279,8 @@ python3 dashboard/server.py
 # 打开浏览器
 open http://127.0.0.1:7891
 ```
+
+> 💡 **前端开发模式**：`cd edict/frontend && npm install && npm run dev` → http://localhost:5173
 
 > 💡 详细教程请看 [Getting Started 指南](docs/getting-started.md)
 
@@ -389,7 +394,11 @@ edict/
 ├── tests/
 │   └── test_e2e_kanban.py      # 端到端测试（17 个断言）
 ├── data/                       # 运行时数据（gitignored）
-├── docs/                       # 文档 + 截图
+├── docs/
+│   ├── task-dispatch-architecture.md  # 📚 详细架构文档：任务分发、流转、调度的完整设计（业务+技术）
+│   ├── getting-started.md             # 快速上手指南
+│   ├── wechat-article.md              # 微信文章
+│   └── screenshots/                   # 功能截图（11 张）
 ├── install.sh                  # 一键安装脚本
 ├── CONTRIBUTING.md             # 贡献指南
 └── LICENSE                     # MIT License
@@ -438,16 +447,33 @@ edict/
 
 | 特点 | 说明 |
 |------|------|
-| **零依赖** | 看板 + 服务器完全基于 Python 标准库 + 原生 HTML/CSS/JS |
-| **单文件前端** | `dashboard.html` 一个文件，零外部依赖 |
-| **纯 stdlib 后端** | `server.py` 基于 `http.server`，无需 pip install |
+| **React 18 前端** | TypeScript + Vite + Zustand 状态管理，13 个功能组件 |
+| **纯 stdlib 后端** | `server.py` 基于 `http.server`，零依赖，同时提供 API + 静态文件服务 |
+| **Agent 思考可视** | 实时展示 Agent 的 thinking 过程、工具调用、返回结果 |
 | **一键安装** | `install.sh` 自动完成全部配置 |
 | **15 秒同步** | 数据自动刷新，看板倒计时显示 |
 | **每日仪式** | 首次打开播放上朝开场动画 |
 
 ---
 
-## 🗺️ Roadmap
+## � 深入了解
+
+### 核心文档
+
+- **[📖 任务分发流转完整架构](docs/task-dispatch-architecture.md)** — **必读文档**
+  - 详细讲解三省六部如何处理复杂任务的业务设计和技术实现
+  - 涵盖：9大任务状态机 / 权限矩阵 / 4阶段调度（重试→升级→回滚）/ Session JSONL数据融合
+  - 包含完整的使用案例、API端点说明、CLI工具文档
+  - 对标 CrewAI/AutoGen：为什么制度化>自由协作
+  - 故障场景与恢复机制
+  - **读这个文档会理解为什么三省六部这么强大**（9500+ 字，30 分钟完整理解）
+
+- **[🚀 快速上手指南](docs/getting-started.md)** — 新手入门
+- **[🤝 贡献指南](CONTRIBUTING.md)** — 想参与贡献？从这里开始
+
+---
+
+## �🗺️ Roadmap
 
 > 完整路线图及参与方式：[ROADMAP.md](ROADMAP.md)
 
@@ -466,6 +492,9 @@ edict/
 - [x] 旨意数据清洗（路径/元数据/前缀自动剥离）
 - [x] 重复任务防护 + 已完成任务保护
 - [x] 端到端测试覆盖（17 个断言）
+- [x] React 18 前端重构（TypeScript + Vite + Zustand · 13 组件）
+- [x] Agent 思考过程可视化（实时 thinking / 工具调用 / 返回结果）
+- [x] 前后端一体化部署（server.py 同时提供 API + 静态文件服务）
 
 ### Phase 2 — 制度深化 🚧
 - [ ] 御批模式（人工审批 + 一键准奏/封驳）
