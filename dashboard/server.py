@@ -761,12 +761,12 @@ def get_task_activity(task_id):
     todos = task.get('todos', [])
     updated_at = task.get('updatedAt', '')
 
-    # 当前负责 Agent
+    # 当前负责 Agent（兼容旧逻辑）
     agent_id = _STATE_AGENT_MAP.get(state)
     if agent_id is None and state in ('Doing', 'Next'):
         agent_id = _ORG_AGENT_MAP.get(org)
 
-    # 构建活动条目列表（从 flow_log + 当前 progress）
+    # 构建活动条目列表（flow_log + progress_log）
     activity = []
 
     # 1. flow_log 转为活动条目
@@ -779,22 +779,62 @@ def get_task_activity(task_id):
             'remark': fl.get('remark', ''),
         })
 
-    # 2. 当前进展（now 字段，Agent 通过 progress 命令上报）
-    if now_text:
-        activity.append({
-            'at': updated_at,
-            'kind': 'progress',
-            'text': now_text,
-            'agent': agent_id or '',
-        })
+    progress_log = task.get('progress_log', [])
+    related_agents = set()
 
-    # 3. 计划清单（todos 字段）
-    if todos:
-        activity.append({
-            'at': updated_at,
-            'kind': 'todos',
-            'items': todos,
-        })
+    if progress_log:
+        # 2. 多 Agent 实时进展日志（每条 progress 都保留自己的 todo 快照）
+        for pl in progress_log:
+            p_at = pl.get('at', '')
+            p_agent = pl.get('agent', '')
+            p_text = pl.get('text', '')
+            p_todos = pl.get('todos', [])
+            if p_agent:
+                related_agents.add(p_agent)
+            if p_text:
+                activity.append({
+                    'at': p_at,
+                    'kind': 'progress',
+                    'text': p_text,
+                    'agent': p_agent,
+                    'agentLabel': pl.get('agentLabel', ''),
+                })
+            if p_todos:
+                activity.append({
+                    'at': p_at,
+                    'kind': 'todos',
+                    'items': p_todos,
+                    'agent': p_agent,
+                    'agentLabel': pl.get('agentLabel', ''),
+                })
+
+        # 仅当无法通过状态确定 Agent 时，才回退到最后一次上报的 Agent
+        if not agent_id:
+            last_pl = progress_log[-1]
+            if last_pl.get('agent'):
+                agent_id = last_pl.get('agent')
+    else:
+        # 兼容旧数据：仅使用 now/todos
+        if now_text:
+            activity.append({
+                'at': updated_at,
+                'kind': 'progress',
+                'text': now_text,
+                'agent': agent_id or '',
+            })
+        if todos:
+            activity.append({
+                'at': updated_at,
+                'kind': 'todos',
+                'items': todos,
+                'agent': agent_id or '',
+            })
+
+    # 按时间排序，保证流转/进展穿插正确
+    activity.sort(key=lambda x: x.get('at', ''))
+
+    if agent_id:
+        related_agents.add(agent_id)
 
     return {
         'ok': True,
@@ -804,7 +844,7 @@ def get_task_activity(task_id):
         'lastActive': updated_at[:19].replace('T', ' ') if updated_at else None,
         'activity': activity,
         'activitySource': 'progress',
-        'relatedAgents': [agent_id] if agent_id else [],
+        'relatedAgents': sorted(list(related_agents)),
     }
 
 

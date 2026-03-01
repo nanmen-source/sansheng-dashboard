@@ -22,7 +22,7 @@
   # 🔥 实时进展汇报（Agent 主动调用，频率不限）
   python3 kanban_update.py progress JJC-20260223-012 "正在分析需求，拟定3个子方案" "1.调研技术选型|2.撰写设计文档|3.实现原型"
 """
-import json, pathlib, datetime, sys, subprocess, logging
+import json, pathlib, datetime, sys, subprocess, logging, os, re
 
 _BASE = pathlib.Path(__file__).resolve().parent.parent
 TASKS_FILE = _BASE / 'data' / 'tasks_source.json'
@@ -37,6 +37,28 @@ from file_lock import atomic_json_read, atomic_json_update, atomic_json_write  #
 STATE_ORG_MAP = {
     'Taizi': '太子', 'Zhongshu': '中书省', 'Menxia': '门下省', 'Assigned': '尚书省',
     'Doing': '执行中', 'Review': '尚书省', 'Done': '完成', 'Blocked': '阻塞',
+}
+
+_STATE_AGENT_MAP = {
+    'Taizi': 'main',
+    'Zhongshu': 'zhongshu',
+    'Menxia': 'menxia',
+    'Assigned': 'shangshu',
+    'Review': 'shangshu',
+    'Pending': 'zhongshu',
+}
+
+_ORG_AGENT_MAP = {
+    '礼部': 'libu', '户部': 'hubu', '兵部': 'bingbu',
+    '刑部': 'xingbu', '工部': 'gongbu', '吏部': 'libu_hr',
+    '中书省': 'zhongshu', '门下省': 'menxia', '尚书省': 'shangshu',
+}
+
+_AGENT_LABELS = {
+    'main': '太子', 'taizi': '太子',
+    'zhongshu': '中书省', 'menxia': '门下省', 'shangshu': '尚书省',
+    'libu': '礼部', 'hubu': '户部', 'bingbu': '兵部', 'xingbu': '刑部',
+    'gongbu': '工部', 'libu_hr': '吏部', 'zaochao': '钦天监',
 }
 
 def load():
@@ -100,6 +122,34 @@ def _sanitize_remark(raw):
     if len(t) > 120:
         t = t[:120] + '…'
     return t
+
+
+def _infer_agent_id_from_runtime(task=None):
+    """尽量推断当前执行该命令的 Agent。"""
+    for k in ('OPENCLAW_AGENT_ID', 'OPENCLAW_AGENT', 'AGENT_ID'):
+        v = (os.environ.get(k) or '').strip()
+        if v:
+            return v
+
+    cwd = str(pathlib.Path.cwd())
+    m = re.search(r'workspace-([a-zA-Z0-9_\-]+)', cwd)
+    if m:
+        return m.group(1)
+
+    fpath = str(pathlib.Path(__file__).resolve())
+    m2 = re.search(r'workspace-([a-zA-Z0-9_\-]+)', fpath)
+    if m2:
+        return m2.group(1)
+
+    if task:
+        state = task.get('state', '')
+        org = task.get('org', '')
+        aid = _STATE_AGENT_MAP.get(state)
+        if aid is None and state in ('Doing', 'Next'):
+            aid = _ORG_AGENT_MAP.get(org)
+        if aid:
+            return aid
+    return ''
 
 
 def _is_valid_task_title(title):
@@ -264,11 +314,12 @@ def cmd_progress(task_id, now_text, todos_pipe=''):
         log.error(f'任务 {task_id} 不存在')
         return
 
-    # 更新 now（实时状态描述）
+    # 更新 now（实时状态描述，兼容旧版读取）
     clean = _sanitize_remark(now_text)
     t['now'] = clean
 
     # 解析 todos_pipe
+    parsed_todos = None
     if todos_pipe:
         new_todos = []
         for i, item in enumerate(todos_pipe.split('|'), 1):
@@ -286,9 +337,25 @@ def cmd_progress(task_id, now_text, todos_pipe=''):
                 title = item
             new_todos.append({'id': str(i), 'title': title, 'status': status})
         if new_todos:
+            parsed_todos = new_todos
             t['todos'] = new_todos
 
-    t['updatedAt'] = now_iso()
+    # 多 Agent 并行进展日志（新增）
+    at = now_iso()
+    agent_id = _infer_agent_id_from_runtime(t)
+    agent_label = _AGENT_LABELS.get(agent_id, agent_id)
+    log_todos = parsed_todos if parsed_todos is not None else t.get('todos', [])
+    t.setdefault('progress_log', []).append({
+        'at': at,
+        'agent': agent_id,
+        'agentLabel': agent_label,
+        'text': clean,
+        'todos': log_todos,
+        'state': t.get('state', ''),
+        'org': t.get('org', ''),
+    })
+
+    t['updatedAt'] = at
     save(tasks)
 
     done_cnt = sum(1 for td in t.get('todos', []) if td.get('status') == 'completed')

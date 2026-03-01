@@ -313,6 +313,12 @@
     .la-empty{text-align:center;color:var(--muted);padding:20px;font-size:12px}
     .la-tool-name{font-weight:700;margin-right:4px}
     .la-trunc{color:var(--muted);font-size:10px;opacity:.6}
+    .la-flow-wrap{display:flex;flex-direction:column;gap:6px}
+    .la-groups{display:flex;flex-direction:column;gap:8px;margin-top:4px}
+    .la-group{border:1px solid var(--line);border-radius:8px;background:var(--panel)}
+    .la-group-hd{display:flex;align-items:center;justify-content:space-between;padding:6px 10px;border-bottom:1px solid var(--line);font-size:11px;color:var(--muted)}
+    .la-group-hd .name{font-weight:700;color:var(--text)}
+    .la-group-bd{display:flex;flex-direction:column;gap:4px;padding:6px}
 
     /* ══ SUBSCRIPTION CONFIG ══ */
     .sub-config{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px;margin-bottom:18px}
@@ -1217,7 +1223,7 @@ function renderLiveActivity(data){
   // Agent label map
   const _agentLabels={main:'太子',zhongshu:'中书省',menxia:'门下省',shangshu:'尚书省',libu:'礼部',hubu:'户部',bingbu:'兵部',xingbu:'刑部',gongbu:'工部',libu_hr:'吏部',zaochao:'钦天监'};
 
-  const entries=data.activity.map(a=>{
+  const renderEntry=(a)=>{
     const time=a.at?fmtActivityTime(a.at):'';
     if(a.kind==='flow'){
       return `<div class="la-entry la-tool"><span class="la-icon">📋</span><span class="la-body"><b>${esc(a.from)}</b> → <b>${esc(a.to)}</b>　${esc(a.remark||'')}</span><span class="la-time">${time}</span></div>`;
@@ -1227,12 +1233,13 @@ function renderLiveActivity(data){
       return `<div class="la-entry la-assistant"><span class="la-icon">🔄</span><span class="la-body">${agBadge}<b>当前进展：</b>${esc(a.text)}</span><span class="la-time">${time}</span></div>`;
     }
     if(a.kind==='todos'){
+      const agBadge=a.agent?`<span style="font-size:9px;color:var(--muted);background:var(--panel);padding:1px 4px;border-radius:3px;margin-right:4px">${_agentLabels[a.agent]||a.agent}</span>`:'';
       const items=(a.items||[]).map(td=>{
         const icon=td.status==='completed'?'✅':td.status==='in-progress'?'🔄':'⬜';
         const cls=td.status==='completed'?'style="opacity:0.5;text-decoration:line-through"':td.status==='in-progress'?'style="color:#60a5fa;font-weight:bold"':'';
         return `<div ${cls}>${icon} ${esc(td.title)}</div>`;
       }).join('');
-      return `<div class="la-entry" style="flex-direction:column;align-items:flex-start;gap:2px"><div style="font-size:11px;color:var(--muted);margin-bottom:2px">📝 执行计划</div>${items}</div>`;
+      return `<div class="la-entry" style="flex-direction:column;align-items:flex-start;gap:2px"><div style="font-size:11px;color:var(--muted);margin-bottom:2px">${agBadge}📝 执行计划</div>${items}</div>`;
     }
     // legacy kinds (assistant/tool_result/user) - backward compatibility
     const agBadge=a.agent?`<span style="font-size:9px;color:var(--muted);background:var(--panel);padding:1px 4px;border-radius:3px;margin-right:4px">${_agentLabels[a.agent]||a.agent}</span>`:'';
@@ -1259,7 +1266,33 @@ function renderLiveActivity(data){
       return `<div class="la-entry la-user"><span class="la-icon">📥</span><span class="la-body">${agBadge}${esc(a.text||'')}</span><span class="la-time">${time}</span></div>`;
     }
     return '';
-  }).join('');
+  };
+
+  const flowItems=(data.activity||[]).filter(a=>a.kind==='flow');
+  const nonFlowItems=(data.activity||[]).filter(a=>a.kind!=='flow');
+
+  const flowHtml=flowItems.length
+    ? `<div class="la-flow-wrap">${flowItems.map(renderEntry).join('')}</div>`
+    : '';
+
+  let groupedHtml='';
+  if(nonFlowItems.length){
+    const grouped=new Map();
+    nonFlowItems.forEach(a=>{
+      const key=a.agent||'unknown';
+      if(!grouped.has(key)) grouped.set(key,[]);
+      grouped.get(key).push(a);
+    });
+
+    groupedHtml=`<div class="la-groups">${Array.from(grouped.entries()).map(([agent, items])=>{
+      const label=_agentLabels[agent]||agent||'未标识';
+      const last=items[items.length-1];
+      const lastTime=last&&last.at?fmtActivityTime(last.at):'--:--:--';
+      return `<div class="la-group"><div class="la-group-hd"><span class="name">${esc(label)}</span><span>最近更新 ${lastTime}</span></div><div class="la-group-bd">${items.map(renderEntry).join('')}</div></div>`;
+    }).join('')}</div>`;
+  }
+
+  const entries=flowHtml+groupedHtml;
 
   const shouldScroll=_laLastCount!==data.activity.length;
   log.innerHTML=srcBanner+(entries||'<div class="la-empty">暂无此任务的对话记录</div>');
