@@ -325,6 +325,10 @@ def handle_create_task(title, org='中书省', official='中书令', priority='n
     # 发送给 main (太子) 而不是 zhongshu，让太子走正常流程分拣→中书省
     def dispatch_to_agent():
         try:
+            # 前置检查 Gateway 是否在线
+            if not _check_gateway_alive():
+                log.warning(f'⚠️ {task_id} 派发跳过: Gateway 未启动')
+                return
             msg = (
                 f'📜 皇上新旨意（已录入看板，请直接处理）\n'
                 f'任务ID: {task_id}\n'
@@ -388,6 +392,204 @@ def handle_review_action(task_id, action, comment=''):
     save_tasks(tasks)
     label = '已准奏' if action == 'approve' else '已封驳'
     return {'ok': True, 'message': f'{task_id} {label}'}
+
+
+# ══ Agent 在线状态检测 ══
+
+_AGENT_DEPTS = [
+    {'id':'main',    'label':'太子',  'emoji':'🤴', 'role':'太子',     'rank':'储君'},
+    {'id':'taizi',   'label':'太子',  'emoji':'🤴', 'role':'太子',     'rank':'储君'},
+    {'id':'zhongshu','label':'中书省','emoji':'📜', 'role':'中书令',   'rank':'正一品'},
+    {'id':'menxia',  'label':'门下省','emoji':'🔍', 'role':'侍中',     'rank':'正一品'},
+    {'id':'shangshu','label':'尚书省','emoji':'📮', 'role':'尚书令',   'rank':'正一品'},
+    {'id':'hubu',    'label':'户部',  'emoji':'💰', 'role':'户部尚书', 'rank':'正二品'},
+    {'id':'libu',    'label':'礼部',  'emoji':'📝', 'role':'礼部尚书', 'rank':'正二品'},
+    {'id':'bingbu',  'label':'兵部',  'emoji':'⚔️', 'role':'兵部尚书', 'rank':'正二品'},
+    {'id':'xingbu',  'label':'刑部',  'emoji':'⚖️', 'role':'刑部尚书', 'rank':'正二品'},
+    {'id':'gongbu',  'label':'工部',  'emoji':'🔧', 'role':'工部尚书', 'rank':'正二品'},
+    {'id':'libu_hr', 'label':'吏部',  'emoji':'👔', 'role':'吏部尚书', 'rank':'正二品'},
+    {'id':'zaochao', 'label':'钦天监','emoji':'📰', 'role':'朝报官',   'rank':'正三品'},
+]
+
+
+def _check_gateway_alive():
+    """检测 Gateway 进程是否在运行。"""
+    try:
+        result = subprocess.run(['pgrep', '-f', 'openclaw-gateway'],
+                                capture_output=True, text=True, timeout=5)
+        return result.returncode == 0
+    except Exception:
+        return False
+
+
+def _check_gateway_probe():
+    """通过 HTTP probe 检测 Gateway 是否响应。"""
+    try:
+        from urllib.request import urlopen
+        resp = urlopen('http://127.0.0.1:18789/', timeout=3)
+        return resp.status == 200
+    except Exception:
+        return False
+
+
+def _get_agent_session_status(agent_id):
+    """读取 Agent 的 sessions.json 获取活跃状态。
+    返回: (last_active_ts_ms, session_count, is_busy)
+    """
+    sessions_file = OCLAW_HOME / 'agents' / agent_id / 'sessions' / 'sessions.json'
+    if not sessions_file.exists() and agent_id == 'taizi':
+        sessions_file = OCLAW_HOME / 'agents' / 'main' / 'sessions' / 'sessions.json'
+    if not sessions_file.exists():
+        return 0, 0, False
+    try:
+        data = json.loads(sessions_file.read_text())
+        if not isinstance(data, dict):
+            return 0, 0, False
+        session_count = len(data)
+        last_ts = 0
+        for v in data.values():
+            ts = v.get('updatedAt', 0)
+            if isinstance(ts, (int, float)) and ts > last_ts:
+                last_ts = ts
+        now_ms = int(datetime.datetime.now().timestamp() * 1000)
+        age_ms = now_ms - last_ts if last_ts else 9999999999
+        is_busy = age_ms <= 2 * 60 * 1000  # 2分钟内视为正在工作
+        return last_ts, session_count, is_busy
+    except Exception:
+        return 0, 0, False
+
+
+def _check_agent_process(agent_id):
+    """检测是否有该 Agent 的 openclaw-agent 进程正在运行。"""
+    try:
+        result = subprocess.run(
+            ['pgrep', '-f', f'openclaw.*--agent.*{agent_id}'],
+            capture_output=True, text=True, timeout=5
+        )
+        return result.returncode == 0
+    except Exception:
+        return False
+
+
+def _check_agent_workspace(agent_id):
+    """检查 Agent 工作空间是否存在。"""
+    ws = OCLAW_HOME / f'workspace-{agent_id}'
+    return ws.is_dir()
+
+
+def get_agents_status():
+    """获取所有 Agent 的在线状态。
+    返回各 Agent 的:
+    - status: 'running' | 'idle' | 'offline' | 'unconfigured'
+    - lastActive: 最后活跃时间
+    - sessions: 会话数
+    - hasWorkspace: 工作空间是否存在
+    - processAlive: 是否有进程在运行
+    """
+    gateway_alive = _check_gateway_alive()
+    gateway_probe = _check_gateway_probe() if gateway_alive else False
+
+    agents = []
+    seen_ids = set()
+    for dept in _AGENT_DEPTS:
+        aid = dept['id']
+        if aid in seen_ids:
+            continue
+        seen_ids.add(aid)
+
+        has_workspace = _check_agent_workspace(aid)
+        last_ts, sess_count, is_busy = _get_agent_session_status(aid)
+        process_alive = _check_agent_process(aid)
+
+        # 状态判定
+        if not has_workspace:
+            status = 'unconfigured'
+            status_label = '❌ 未配置'
+        elif not gateway_alive:
+            status = 'offline'
+            status_label = '🔴 Gateway 离线'
+        elif process_alive or is_busy:
+            status = 'running'
+            status_label = '🟢 运行中'
+        elif last_ts > 0:
+            now_ms = int(datetime.datetime.now().timestamp() * 1000)
+            age_ms = now_ms - last_ts
+            if age_ms <= 10 * 60 * 1000:  # 10分钟内
+                status = 'idle'
+                status_label = '🟡 待命'
+            elif age_ms <= 3600 * 1000:  # 1小时内
+                status = 'idle'
+                status_label = '⚪ 空闲'
+            else:
+                status = 'idle'
+                status_label = '⚪ 休眠'
+        else:
+            status = 'idle'
+            status_label = '⚪ 无记录'
+
+        # 格式化最后活跃时间
+        last_active_str = None
+        if last_ts > 0:
+            try:
+                last_active_str = datetime.datetime.fromtimestamp(
+                    last_ts / 1000
+                ).strftime('%m-%d %H:%M')
+            except Exception:
+                pass
+
+        agents.append({
+            'id': aid,
+            'label': dept['label'],
+            'emoji': dept['emoji'],
+            'role': dept['role'],
+            'status': status,
+            'statusLabel': status_label,
+            'lastActive': last_active_str,
+            'lastActiveTs': last_ts,
+            'sessions': sess_count,
+            'hasWorkspace': has_workspace,
+            'processAlive': process_alive,
+        })
+
+    return {
+        'ok': True,
+        'gateway': {
+            'alive': gateway_alive,
+            'probe': gateway_probe,
+            'status': '🟢 运行中' if gateway_probe else ('🟡 进程在但无响应' if gateway_alive else '🔴 未启动'),
+        },
+        'agents': agents,
+        'checkedAt': now_iso(),
+    }
+
+
+def wake_agent(agent_id, message=''):
+    """唤醒指定 Agent，发送一条心跳/唤醒消息。"""
+    if not _SAFE_NAME_RE.match(agent_id):
+        return {'ok': False, 'error': f'agent_id 非法: {agent_id}'}
+    if not _check_agent_workspace(agent_id):
+        return {'ok': False, 'error': f'{agent_id} 工作空间不存在，请先配置'}
+    if not _check_gateway_alive():
+        return {'ok': False, 'error': 'Gateway 未启动，请先运行 openclaw gateway start'}
+
+    # 确定实际 agent id（taizi 用 main）
+    runtime_id = 'main' if agent_id == 'taizi' else agent_id
+    msg = message or f'🔔 系统心跳检测 — 请回复 OK 确认在线。当前时间: {now_iso()}'
+
+    def do_wake():
+        try:
+            cmd = ['openclaw', 'agent', '--agent', runtime_id, '-m', msg, '--timeout', '120']
+            log.info(f'🔔 唤醒 {agent_id} ({runtime_id})...')
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=130)
+            if result.returncode == 0:
+                log.info(f'✅ {agent_id} 已唤醒')
+            else:
+                log.warning(f'⚠️ {agent_id} 唤醒失败: {result.stderr[:200]}')
+        except Exception as e:
+            log.warning(f'⚠️ {agent_id} 唤醒异常: {e}')
+    threading.Thread(target=do_wake, daemon=True).start()
+
+    return {'ok': True, 'message': f'{agent_id} 唤醒指令已发出，约10-30秒后生效'}
 
 
 # ══ Agent 实时活动读取 ══
@@ -1201,6 +1403,8 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json({'ok': False, 'error': 'task_id required'}, 400)
             else:
                 self.send_json(get_task_activity(task_id))
+        elif p == '/api/agents-status':
+            self.send_json(get_agents_status())
         elif p.startswith('/api/agent-activity/'):
             agent_id = p.replace('/api/agent-activity/', '')
             if not agent_id or not _SAFE_NAME_RE.match(agent_id):
@@ -1352,6 +1556,16 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json({'ok': False, 'error': 'taskId required'}, 400)
                 return
             result = handle_advance_state(task_id, comment)
+            self.send_json(result)
+            return
+
+        if p == '/api/agent-wake':
+            agent_id = body.get('agentId', '').strip()
+            message = body.get('message', '').strip()
+            if not agent_id:
+                self.send_json({'ok': False, 'error': 'agentId required'}, 400)
+                return
+            result = wake_agent(agent_id, message)
             self.send_json(result)
             return
 

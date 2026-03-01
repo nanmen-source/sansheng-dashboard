@@ -361,6 +361,37 @@
     .toast.ok{border-color:#2ecc8a55;background:#0a1a10}.toast.err{border-color:#ff527055;background:#200a10}
     @keyframes tin{from{transform:translateX(40px);opacity:0}to{transform:translateX(0);opacity:1}}
 
+    /* ══ AGENT STATUS PANEL ══ */
+    .as-panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px 18px;margin-bottom:16px}
+    .as-header{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+    .as-title{font-size:13px;font-weight:700;color:var(--fg)}
+    .as-gw{font-size:11px;padding:3px 10px;border-radius:999px;margin-left:auto}
+    .as-gw.ok{background:#0a2018;border:1px solid #2ecc8a44;color:var(--ok)}
+    .as-gw.err{background:#200a10;border:1px solid #ff527044;color:var(--danger)}
+    .as-gw.warn{background:#201a08;border:1px solid #f5c84244;color:var(--warn)}
+    .as-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px}
+    .as-card{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:10px;text-align:center;cursor:pointer;transition:border-color .15s,background .15s;position:relative}
+    .as-card:hover{border-color:var(--acc);background:#0a1228}
+    .as-card .as-emoji{font-size:22px;margin-bottom:3px}
+    .as-card .as-label{font-size:12px;font-weight:700;color:var(--fg)}
+    .as-card .as-role{font-size:10px;color:var(--muted)}
+    .as-card .as-status{font-size:10px;margin-top:4px}
+    .as-card .as-time{font-size:9px;color:var(--muted);margin-top:2px}
+    .as-card .as-dot{position:absolute;top:6px;right:6px;width:8px;height:8px;border-radius:50%}
+    .as-dot.running{background:#2ecc8a;box-shadow:0 0 6px #2ecc8a88;animation:pulse 1.5s infinite}
+    .as-dot.idle{background:#4a5568}
+    .as-dot.offline{background:#ff5270;animation:pulse 1.2s infinite}
+    .as-dot.unconfigured{background:#6b7280}
+    .as-wake-btn{font-size:10px;padding:2px 8px;border-radius:6px;border:1px solid var(--acc);color:var(--acc);background:transparent;cursor:pointer;margin-top:6px;transition:background .15s}
+    .as-wake-btn:hover{background:var(--acc);color:#fff}
+    .as-wake-btn:disabled{opacity:.4;cursor:not-allowed}
+    .as-refresh{font-size:11px;padding:4px 12px;border-radius:8px;border:1px solid var(--line);color:var(--muted);background:transparent;cursor:pointer;transition:background .15s}
+    .as-refresh:hover{background:var(--panel2);color:var(--fg)}
+    .as-wake-all{font-size:11px;padding:4px 12px;border-radius:8px;border:1px solid var(--warn);color:var(--warn);background:transparent;cursor:pointer;transition:background .15s;margin-left:6px}
+    .as-wake-all:hover{background:var(--warn);color:#fff}
+    .as-summary{font-size:11px;color:var(--muted);display:flex;gap:12px;margin-top:10px;padding-top:8px;border-top:1px solid var(--line)}
+    .as-summary span{display:flex;align-items:center;gap:4px}
+
     /* ══ OFFICIALS ══ */
     /* activity bar */
     .off-activity{display:flex;align-items:center;gap:8px;padding:8px 14px;background:#0a1228;border:1px solid #1a2a4a;border-radius:10px;margin-bottom:14px;font-size:12px;flex-wrap:wrap}
@@ -623,6 +654,7 @@
 
   <!-- ══ 省部调度 ══ -->
   <div class="panel" id="panel-monitor">
+    <div id="agent-status-panel"></div>
     <div style="font-size:12px;color:var(--muted);margin-bottom:14px">各省部当前承接旨意与执行状态 · 每5秒自动刷新</div>
     <div class="duty-grid" id="duty-grid"></div>
   </div>
@@ -920,6 +952,96 @@ function renderEdicts(tasks){
       </div>
     </div>`;
   }).join('');
+}
+
+/* ══ AGENT STATUS PANEL ══ */
+let _agentsStatusData = null;
+let _agentsStatusLoading = false;
+
+async function loadAgentsStatus(){
+  if(_agentsStatusLoading) return;
+  _agentsStatusLoading = true;
+  try{
+    _agentsStatusData = await fetchJ(API+'/agents-status');
+    renderAgentsStatus(_agentsStatusData);
+  }catch(e){
+    document.getElementById('agent-status-panel').innerHTML=
+      '<div class="as-panel"><div style="color:var(--danger);font-size:12px">⚠️ 无法获取 Agent 状态</div></div>';
+  }finally{
+    _agentsStatusLoading = false;
+  }
+}
+
+function renderAgentsStatus(data){
+  if(!data||!data.ok) return;
+  const gw = data.gateway||{};
+  const agents = data.agents||[];
+  // 跳过 main（和 taizi 重复）
+  const filtered = agents.filter(a=>a.id!=='main');
+  const running = filtered.filter(a=>a.status==='running').length;
+  const idle = filtered.filter(a=>a.status==='idle').length;
+  const offline = filtered.filter(a=>a.status==='offline').length;
+  const unconf = filtered.filter(a=>a.status==='unconfigured').length;
+  const gwCls = gw.probe?'ok':gw.alive?'warn':'err';
+
+  document.getElementById('agent-status-panel').innerHTML=`
+    <div class="as-panel">
+      <div class="as-header">
+        <span class="as-title">🔌 Agent 在线状态</span>
+        <span class="as-gw ${gwCls}">Gateway: ${esc(gw.status||'未知')}</span>
+        <button class="as-refresh" onclick="loadAgentsStatus()" title="刷新状态">🔄 刷新</button>
+        ${offline+unconf>0?`<button class="as-wake-all" onclick="wakeAllAgents()" title="唤醒所有离线Agent">⚡ 全部唤醒</button>`:''}
+      </div>
+      <div class="as-grid">
+        ${filtered.map(a=>{
+          const dotCls = a.status;
+          const canWake = a.status!=='running' && a.status!=='unconfigured' && gw.alive;
+          return `<div class="as-card" title="${esc(a.role)} · ${esc(a.statusLabel)}">
+            <div class="as-dot ${dotCls}"></div>
+            <div class="as-emoji">${a.emoji}</div>
+            <div class="as-label">${esc(a.label)}</div>
+            <div class="as-role">${esc(a.role)}</div>
+            <div class="as-status">${esc(a.statusLabel)}</div>
+            ${a.lastActive?`<div class="as-time">⏰ ${esc(a.lastActive)}</div>`:'<div class="as-time">无活动记录</div>'}
+            ${canWake?`<button class="as-wake-btn" onclick="event.stopPropagation();wakeAgent('${a.id}',this)">⚡ 唤醒</button>`:''}
+          </div>`;
+        }).join('')}
+      </div>
+      <div class="as-summary">
+        <span><span class="as-dot running" style="position:static;width:8px;height:8px"></span> ${running} 运行中</span>
+        <span><span class="as-dot idle" style="position:static;width:8px;height:8px"></span> ${idle} 待命</span>
+        ${offline?`<span><span class="as-dot offline" style="position:static;width:8px;height:8px"></span> ${offline} 离线</span>`:''}
+        ${unconf?`<span><span class="as-dot unconfigured" style="position:static;width:8px;height:8px"></span> ${unconf} 未配置</span>`:''}
+        <span style="margin-left:auto;font-size:10px;color:var(--muted)">检测于 ${(data.checkedAt||'').substring(11,19)}</span>
+      </div>
+    </div>`;
+}
+
+async function wakeAgent(agentId, btn){
+  if(btn){ btn.disabled=true; btn.textContent='⏳ 唤醒中...'; }
+  try{
+    const r = await postJ(API+'/agent-wake', {agentId});
+    toast(r.message||'唤醒指令已发出','ok');
+    // 30秒后自动刷新状态
+    setTimeout(()=>loadAgentsStatus(), 30000);
+  }catch(e){
+    toast('唤醒失败: '+e.message,'err');
+    if(btn){ btn.disabled=false; btn.textContent='⚡ 唤醒'; }
+  }
+}
+
+async function wakeAllAgents(){
+  if(!_agentsStatusData) return;
+  const toWake = (_agentsStatusData.agents||[]).filter(a=>
+    a.id!=='main' && a.status!=='running' && a.status!=='unconfigured'
+  );
+  if(!toWake.length){ toast('所有 Agent 均已在线','ok'); return; }
+  toast(`正在唤醒 ${toWake.length} 个 Agent...`,'ok',5000);
+  for(const a of toWake){
+    try{ await postJ(API+'/agent-wake', {agentId: a.id}); }catch(e){}
+  }
+  toast(`${toWake.length} 个唤醒指令已发出，30秒后刷新状态`,'ok',5000);
+  setTimeout(()=>loadAgentsStatus(), 30000);
 }
 
 /* ══ DEPT MONITOR ══ */
@@ -2261,6 +2383,7 @@ document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>{
   document.getElementById('panel-'+activeTab).classList.add('active');
   if(['models','skills'].includes(activeTab))loadAgentConfig();
   if(activeTab==='officials')loadOfficials();
+  if(activeTab==='monitor')loadAgentsStatus();
   if(activeTab==='morning')loadMorning();
   if(activeTab==='sessions')renderSessions(liveStatus?liveStatus.tasks:[]);
   if(activeTab==='memorials')renderMemorials();
@@ -2617,6 +2740,16 @@ async function executeTemplate(e, tplId){
   const cmd = buildCommand(tplId);
   if(!cmd.trim()){ toast('请填写必填参数','err'); return; }
   const t = TEMPLATES.find(x=>x.id===tplId);
+
+  // 前置校验：检测 Gateway 和关键 Agent 是否在线
+  try{
+    const st = await fetchJ(API+'/agents-status');
+    if(st.ok && st.gateway && !st.gateway.alive){
+      toast('⚠️ Gateway 未启动，任务将无法派发！请先运行 openclaw gateway start','err',6000);
+      if(!confirm('Gateway 未启动，任务创建后将无法自动派发。是否仍然继续？')) return;
+    }
+  }catch(ex){/* 检测失败不阻塞创建 */}
+
   // Show the generated command in a confirmation
   if(!confirm(`确认下旨？\n\n${cmd.substring(0,200)}${cmd.length>200?'…':''}`)) return;
   // 通过 API 创建真实任务
