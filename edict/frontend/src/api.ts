@@ -78,6 +78,19 @@ export const api = {
     postJ<ActionResult>(`${API_BASE}/api/morning-config`, config),
   addSkill: (agentId: string, skillName: string, description: string, trigger: string) =>
     postJ<ActionResult>(`${API_BASE}/api/add-skill`, { agentId, skillName, description, trigger }),
+
+  // 远程 Skills 管理
+  addRemoteSkill: (agentId: string, skillName: string, sourceUrl: string, description?: string) =>
+    postJ<ActionResult & { skillName?: string; agentId?: string; source?: string; localPath?: string; size?: number; addedAt?: string }>(
+      `${API_BASE}/api/add-remote-skill`, { agentId, skillName, sourceUrl, description: description || '' }
+    ),
+  remoteSkillsList: () =>
+    fetchJ<RemoteSkillsListResult>(`${API_BASE}/api/remote-skills-list`),
+  updateRemoteSkill: (agentId: string, skillName: string) =>
+    postJ<ActionResult>(`${API_BASE}/api/update-remote-skill`, { agentId, skillName }),
+  removeRemoteSkill: (agentId: string, skillName: string) =>
+    postJ<ActionResult>(`${API_BASE}/api/remove-remote-skill`, { agentId, skillName }),
+
   createTask: (data: CreateTaskPayload) =>
     postJ<ActionResult & { taskId?: string }>(`${API_BASE}/api/create-task`, data),
 };
@@ -363,4 +376,23 @@ export interface CreateTaskPayload {
   priority?: string;
   templateId?: string;
   params?: Record<string, string>;
+}
+
+export interface RemoteSkillItem {
+  skillName: string;
+  agentId: string;
+  sourceUrl: string;
+  description: string;
+  localPath: string;
+  addedAt: string;
+  lastUpdated: string;
+  status: 'valid' | 'not-found' | string;
+}
+
+export interface RemoteSkillsListResult {
+  ok: boolean;
+  remoteSkills?: RemoteSkillItem[];
+  count?: number;
+  listedAt?: string;
+  error?: string;
 }
