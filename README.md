@@ -29,23 +29,8 @@
 </p>
 
 <p align="center">
-  <b>📮 公众号：cft0808</b>
-  <br>
-  <sub>更新「三省六部」架构拆解、角色设定、踩坑复盘、Issue 修复、Token 省钱术</sub>
-  <br>
-  <a href="docs/wechat.md">👉 点我看公众号介绍 / 关注入口</a>
+  <img src="https://img.shields.io/badge/公众号-cft0808-07C160?style=for-the-badge&logo=wechat&logoColor=white" alt="WeChat">
 </p>
-
-<details>
-<summary><b>📷 扫码关注（二维码）</b></summary>
-
-<p align="center">
-  <img src="docs/assets/wechat-qrcode.jpg" width="220" alt="公众号二维码">
-  <br>
-  <sub>如果你更新了二维码，替换 <code>docs/assets/wechat-qrcode.jpg</code> 即可</sub>
-</p>
-
-</details>
 
 ---
 
@@ -642,7 +627,27 @@ curl http://localhost:7891/api/remote-skills-list
 
 [![Star History Chart](https://api.star-history.com/svg?repos=cft0808/edict&type=Date)](https://star-history.com/#cft0808/edict&Date)
 
-[![Star History Chart](https://api.star-history.com/svg?repos=cft0808/edict&type=Date)](https://star-history.com/#cft0808/edict&Date)
+---
+
+## 📮 朕的邸报——公众号
+
+> 古有邸报传天下政令，今有公众号聊 AI 架构。
+
+<p align="center">
+  <img src="docs/assets/wechat-qrcode.jpg" width="220" alt="公众号二维码 · cft0808">
+  <br><br>
+  <b>👆 扫码关注「cft0808」—— 朕的技术邸报</b>
+</p>
+
+你会看到：
+
+- 🏛️ **架构拆解** —— 三省六部到底怎么分权制衡的？12 个 Agent 各司何职？
+- 🔥 **踩坑复盘** —— Agent 吵架了怎么办？Token 烧光了怎么省？门下省为什么总封驳？
+- 🛠️ **Issue 修复实录** —— 每个 bug 都是一道奏折，看朕如何批红
+- 💡 **Token 省钱术** —— 用 1/10 的 token 跑出门下省审核效果的秘密
+- 🎭 **Agent 人设彩蛋** —— 六部的 SOUL.md 是怎么写出来的？
+
+> *"朕让 AI 上朝，结果 AI 比朕还卷。"* —— 关注后你会懂的。
 
 ---
 
@@ -654,5 +659,6 @@ curl http://localhost:7891/api/remote-skills-list
 
 <p align="center">
   <strong>⚔️ 以古制御新技，以智慧驾驭 AI</strong><br>
-  <sub>Governing AI with the wisdom of ancient empires</sub>
+  <sub>Governing AI with the wisdom of ancient empires</sub><br><br>
+  <a href="#-朕的邸报公众号"><img src="https://img.shields.io/badge/公众号_cft0808-关注获取更新-07C160?style=for-the-badge&logo=wechat&logoColor=white" alt="WeChat"></a>
 </p>

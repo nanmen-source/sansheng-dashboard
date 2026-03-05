@@ -27,23 +27,8 @@
 </p>
 
 <p align="center">
-  <b>📮 WeChat Official Account: cft0808</b>
-  <br>
-  <sub>Architecture breakdowns, role design, postmortems, issue fixes, and token-saving tactics</sub>
-  <br>
-  <a href="docs/wechat.md">👉 Intro & follow entry</a>
+  <img src="https://img.shields.io/badge/WeChat-cft0808-07C160?style=for-the-badge&logo=wechat&logoColor=white" alt="WeChat">
 </p>
-
-<details>
-<summary><b>📷 Scan to follow (QR code)</b></summary>
-
-<p align="center">
-  <img src="docs/assets/wechat-qrcode.jpg" width="220" alt="WeChat QR">
-  <br>
-  <sub>To update the QR, replace <code>docs/assets/wechat-qrcode.jpg</code>.</sub>
-</p>
-
-</details>
 
 ---
 
@@ -432,10 +417,32 @@ Each case includes: Full command → Planning proposal → Review feedback → M
 
 ---
 
+## 📮 WeChat · Behind the Scenes
+
+> *In ancient China, the “Dǐbào” (imperial gazette) delivered edicts across the empire. Today we have a WeChat account.*
+
 <p align="center">
-  <sub>If this project made you smile, give it a ⭐</sub><br><br>
-  <strong>⚔️ Governing AI with the wisdom of ancient empires</strong><br>
-  <sub>以古制御新技，以智慧驾驭 AI</sub>
+  <img src="docs/assets/wechat-qrcode.jpg" width="200" alt="WeChat QR · cft0808">
+  <br>
+  <b>Scan to follow · cft0808</b>
 </p>
 
+What you’ll find:
+- 🏛️ Architecture deep-dives — how 12 agents achieve separation of powers
+- 🔥 War stories — when agents fight, burn tokens, or go on strike
+- 💡 Token-saving tricks — run the full pipeline at 1/10 the cost
+- 🎭 Behind the SOUL.md — how to write prompts that make AI agents stay in character
+
+---
+
+## ⭐ Star History
+
 [![Star History Chart](https://api.star-history.com/svg?repos=cft0808/edict&type=Date)](https://star-history.com/#cft0808/edict&Date)
+
+---
+
+<p align="center">
+  <strong>⚔️ Governing AI with the wisdom of ancient empires</strong><br>
+  <sub>以古制御新技，以智慧驾驭 AI</sub><br><br>
+  <a href="#-wechat--behind-the-scenes"><img src="https://img.shields.io/badge/WeChat_cft0808-Follow_for_updates-07C160?style=for-the-badge&logo=wechat&logoColor=white" alt="WeChat"></a>
+</p>
