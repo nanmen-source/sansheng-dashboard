@@ -6,12 +6,11 @@ WORKDIR /build
 COPY edict/frontend/package.json edict/frontend/package-lock.json ./
 RUN npm ci --silent
 COPY edict/frontend/ ./
-# Build 输出到 /build/dist（vite.config 中 outDir 是相对路径，这里重写）
+# Build 输出到 /build/dist
 RUN npx vite build --outDir /build/dist
 
 # Stage 2: 运行时
 FROM python:3.11-slim
-
 WORKDIR /app
 
 # 复制看板核心文件
@@ -21,7 +20,7 @@ COPY scripts/ ./scripts/
 # 复制 React 构建产物
 COPY --from=frontend-build /build/dist ./dashboard/dist/
 
-# 注入演示数据（data目录由demo_data提供）
+# 注入演示数据
 COPY docker/demo_data/ ./data/
 
 # 非 root 用户运行
@@ -31,7 +30,5 @@ USER appuser
 
 EXPOSE 7891
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD python3 -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:7891/healthz')" || exit 1
-
-CMD python3 dashboard/server_standalone.py --host 0.0.0.0 --port ${PORT:-7891}
+# server_standalone.py 会自动读取 PORT 环境变量
+CMD ["python3", "dashboard/server_standalone.py"]
