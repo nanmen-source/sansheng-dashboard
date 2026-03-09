@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: sansheng-dashboard
+    runtime: python
+    buildCommand: "echo 'No build needed'"
+    startCommand: "python3 dashboard/server_standalone.py --host 0.0.0.0 --port $PORT"
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.0"

@@ -1,0 +1,4 @@
+# 三省六部看板独立部署版
+# 仅使用 Python 标准库，无需额外依赖
+# requests 用于 fetch_morning_news.py 的 RSS 抓取（可选）
+requests>=2.28.0
