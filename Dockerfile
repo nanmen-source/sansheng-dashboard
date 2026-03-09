@@ -1,9 +1,7 @@
-# ⚔️ 三省六部 · Demo Dashboard
-# docker run -p 7891:7891 cft0808/sansheng-demo
-# Then open: http://localhost:7891
+# ⚔️ 三省六部 · Dashboard (Standalone, no OpenClaw required)
 
 # Stage 1: 构建 React 前端
-FROM --platform=${BUILDPLATFORM:-linux/amd64} node:20-alpine AS frontend-build
+FROM node:20-alpine AS frontend-build
 WORKDIR /build
 COPY edict/frontend/package.json edict/frontend/package-lock.json ./
 RUN npm ci --silent
@@ -12,7 +10,7 @@ COPY edict/frontend/ ./
 RUN npx vite build --outDir /build/dist
 
 # Stage 2: 运行时
-FROM --platform=${TARGETPLATFORM:-linux/amd64} python:3.11-slim
+FROM python:3.11-slim
 
 WORKDIR /app
 
@@ -33,7 +31,7 @@ USER appuser
 
 EXPOSE 7891
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD python3 -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:7891/healthz')" || exit 1
 
-CMD ["python3", "dashboard/server.py", "--host", "0.0.0.0", "--port", "7891"]
+CMD ["sh", "-c", "python3 dashboard/server_standalone.py --host 0.0.0.0 --port ${PORT:-7891}"]
