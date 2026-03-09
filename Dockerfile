@@ -34,4 +34,4 @@ EXPOSE 7891
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD python3 -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:7891/healthz')" || exit 1
 
-CMD ["sh", "-c", "python3 dashboard/server_standalone.py --host 0.0.0.0 --port ${PORT:-7891}"]
+CMD python3 dashboard/server_standalone.py --host 0.0.0.0 --port ${PORT:-7891}
